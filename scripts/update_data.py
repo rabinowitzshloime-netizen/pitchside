@@ -76,6 +76,8 @@ def read_feed(source, url):
         link = (it.findtext("link") or "").strip()
         title = clean(it.findtext("title"))
         if not link.startswith("https://") or not title: continue
+        # football only: some feeds mix in NFL, tennis, boxing, etc. Skip betting tips too.
+        if "/football/" not in link or re.search(r"\b(odds|tips|bets?|betting)\b", title, re.I): continue
         try: when = email.utils.parsedate_to_datetime(it.findtext("pubDate")).astimezone(datetime.timezone.utc)
         except Exception: continue
         aid = "r" + hashlib.sha1(link.encode()).hexdigest()[:12]
@@ -120,6 +122,7 @@ def main():
         arts = []
         for a in news.get("articles", []):
             if a.get("type") == "Media": continue
+            if re.search(r"what to watch|how to watch|where to watch", a.get("headline") or "", re.I): continue
             img = (a.get("images") or [{}])[0]
             aid = str(a.get("id"))
             if img.get("url"): photos[aid] = img["url"]
