@@ -46,6 +46,7 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:li
 .btn{justify-content:center}
 .banner .ic{margin-right:4px}
 .read-more{justify-content:center}
+[hidden]{display:none!important}
 .install-btn{border:0;color:#fff;cursor:pointer;font-family:inherit}
 .install-steps{display:flex;flex-direction:column;gap:10px;margin:12px 0 0;padding:0;list-style:none;counter-reset:st}
 .install-steps li{display:flex;gap:10px;align-items:flex-start;line-height:1.4}
@@ -699,9 +700,10 @@ function demoFixtures(league,dateISO){
 /* ---------- Install as an app ---------- */
 let installPrompt=null;
 window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e});
-window.addEventListener("appinstalled",()=>{installPrompt=null;toast("Pitchside is on your home screen ✓")});
+window.addEventListener("appinstalled",()=>{installPrompt=null;store.set("installed",true);document.getElementById("installBtn").hidden=true;toast("Pitchside is on your home screen")});
 const standalone=(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone;
-if(standalone)document.getElementById("installBtn").hidden=true;
+if(standalone){store.set("installed",true);document.getElementById("installBtn").hidden=true}
+else if(store.get("installed",false))document.getElementById("installBtn").hidden=true;
 document.getElementById("installBtn").onclick=async()=>{
   if(installPrompt){installPrompt.prompt();try{await installPrompt.userChoice}catch(e){}installPrompt=null;return}
   const ov=document.getElementById("install");
