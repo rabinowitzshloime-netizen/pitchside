@@ -51,6 +51,31 @@ def clean(t):
     t = re.sub(r"<[^>]+>", " ", html.unescape(t or ""))
     return re.sub(r"\s+", " ", t).strip()
 
+def summary(raw, limit=700):
+    """Feed summary as whole sentences: list items and paragraphs become sentences,
+    'Continue reading' links are dropped, and a cut-off last sentence is removed."""
+    t = html.unescape(raw or "")
+    cut = "continue reading" in t.lower()   # the feed stopped mid-paragraph
+    t = re.sub(r"(?i)<a[^>]*>\s*continue reading.*?</a>", "", t)
+    t = re.sub(r"(?i)</(li|p|h\d)>|<br\s*/?>", ". ", t)
+    t = re.sub(r"<[^>]+>", " ", t)
+    t = re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"(?i)\s*continue reading\.*\s*$", "", t)
+    if re.search(r"(…|\.\.\.)\s*$", t): cut = True; t = re.sub(r"(…|\.\.\.)\s*$", ".", t)
+    t = re.sub(r"\s*\.\s*\.(\s*\.)*", ".", t)          # tidy doubled full stops
+    t = re.sub(r"([!?])\.", r"\1", t)
+    t = re.sub(r"\s+([.!?])", r"\1", t)
+    sents = re.findall(r"[^.!?]+[.!?]+[\"'’”]?", t)
+    if cut and len(sents) > 1: sents = sents[:-1]
+    out = ""
+    for snt in sents:
+        if len(out) + len(snt) > limit and out: break
+        out += snt
+    out = out.strip()
+    if not out:
+        out = t if len(t) <= limit else ""
+    return out
+
 def feed_image(it):
     cands = []
     for tag in (MEDIA + "content", MEDIA + "thumbnail"):
@@ -81,8 +106,7 @@ def read_feed(source, url):
         try: when = email.utils.parsedate_to_datetime(it.findtext("pubDate")).astimezone(datetime.timezone.utc)
         except Exception: continue
         aid = "r" + hashlib.sha1(link.encode()).hexdigest()[:12]
-        desc = clean(it.findtext("description"))
-        if len(desc) > 320: desc = desc[:317].rsplit(" ", 1)[0] + "…"
+        desc = summary(it.findtext("description"))
         out.append({"id": aid, "title": title, "desc": desc, "source": source,
                     "time": when.isoformat().replace("+00:00", "Z"), "by": clean(it.findtext("{http://purl.org/dc/elements/1.1/}creator")) or None,
                     "imgsrc": feed_image(it), "link": link, "topic": topic_of(title + " " + desc)})
