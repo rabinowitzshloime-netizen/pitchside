@@ -322,7 +322,7 @@ async function loadNews(league){
   if(D&&D.news){
     const ls=league==="world"?Object.keys(D.news):[league];
     const seen=new Set(),items=[];
-    ls.forEach(l=>(D.news[l]||[]).forEach(a=>{if(!seen.has(a.id)){seen.add(a.id);items.push({...a,region:a.region||leagueName(l)})}}));
+    ls.forEach(l=>(D.news[l]||[]).forEach(a=>{if(!seen.has(a.id)){seen.add(a.id);items.push({...a,region:a.region||(l==="more"?"":leagueName(l))})}}));
     items.sort((a,b)=>new Date(b.time)-new Date(a.time));
     items.forEach(a=>STORIES[a.id]=a);
     return {live:true,items};
@@ -417,6 +417,7 @@ function wireSelects(root,f,save,rerender,M=COUNTRIES){
 
 const TOPICS=[["all","Everything"],["matches","Matches"],["fans","Crazy fans"],["viral","Viral"],["transfers","Transfers"]];
 const TOPIC_NAME={matches:"Match",fans:"Fans",viral:"Viral",transfers:"Transfer"};
+function metaOf(a,f){return [a.source,a.region||(a.source?"":leagueName(f.league))].filter(Boolean).join(" · ")}
 async function renderNews(){
   const f=state.news;
   app.innerHTML=`<div class="section-title">Top Stories</div>
@@ -441,14 +442,14 @@ async function renderNews(){
    <a class="hero" href="#news" data-story="${esc(top.id)}">
      ${top.img?`<img src="${esc(top.img)}" alt="">`:`<div class="hero-art">${top.teams&&top.teams[0]?crest(top.teams[0]):""}</div>`}<div class="shade"></div>
      <div class="txt"><span class="tag">Breaking</span>${mine(top)?'<span class="tag gold">Your team</span>':""}
-       <h2>${esc(top.title)}</h2><p>${esc(top.desc||"")}</p><div class="meta">${esc(top.region||leagueName(f.league))} · ${ago(top.time)}</div></div>
+       <h2>${esc(top.title)}</h2><p>${esc(top.desc||"")}</p><div class="meta">${esc(metaOf(top,f))} · ${ago(top.time)}</div></div>
    </a>
    <div class="grid">${rest.map(a=>`
      <a class="story ${mine(a)?"mine":""}" href="#news" data-story="${esc(a.id)}">
        <div class="thumb ${a.img?"":"ph"}" ${a.img?`style="background-image:url('${esc(a.img)}')"`:""}>${a.img?"":(a.teams&&a.teams[0]?crest(a.teams[0]):esc((TOPIC_NAME[a.topic]||"News").toUpperCase()))}</div>
        <div class="body">${mine(a)?'<span class="tag gold">Your team</span>':'<span class="tag">'+esc(TOPIC_NAME[a.topic]||"News")+'</span>'}
-         <h3>${esc(a.title)}</h3><div class="meta">${esc(a.region||leagueName(f.league))} · ${ago(a.time)}</div></div>
-     </a>`).join("")}</div>${live&&DATA?`<p class="hint" style="text-align:center;margin-top:16px">News and photos from ESPN · Updated ${esc(new Date(DATA.updated).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"}))}</p>`:""}`;
+         <h3>${esc(a.title)}</h3><div class="meta">${esc(metaOf(a,f))} · ${ago(a.time)}</div></div>
+     </a>`).join("")}</div>${live&&DATA?`<p class="hint" style="text-align:center;margin-top:16px">News from ESPN, BBC Sport, The Guardian, Sky Sports and talkSPORT · Updated ${esc(new Date(DATA.updated).toLocaleString([], {weekday:"short",hour:"2-digit",minute:"2-digit"}))}</p>`:""}`;
   list.forEach(a=>{if(a.id)STORIES[a.id]=a});
   body.querySelectorAll("[data-story]").forEach(el=>el.onclick=e=>{e.preventDefault();openStory(el.dataset.story,list)});
 }
@@ -459,12 +460,12 @@ function openStory(id,list){
   ov.innerHTML=`<div class="story-bar"><button class="back" id="storyBack">← Back</button><span class="tag">${esc(TOPIC_NAME[a.topic]||"News")}</span></div>
    ${a.img?`<figure class="story-photo"><img src="${esc(a.img)}" alt="${esc(a.caption||a.title)}">${a.credit?`<figcaption>Photo: ${esc(a.credit)}</figcaption>`:""}</figure>`:`<div class="story-photo ph">${a.teams&&a.teams[0]?crest(a.teams[0]):""}</div>`}
    <article class="story-body">
-     <div class="meta">${esc(a.region||"")} · ${ago(a.time)}${a.by?" · By "+esc(a.by):""}</div>
+     <div class="meta">${esc([a.source,a.region].filter(Boolean).join(" · "))} · ${ago(a.time)}${a.by?" · By "+esc(a.by):""}</div>
      <h1>${esc(a.title)}</h1>
      <p class="lede">${esc(a.desc||"")}</p>
      ${a.full?a.full.map(p=>`<p>${esc(p)}</p>`).join(""):""}
      ${a.teams&&a.teams.length?`<div class="story-teams">${a.teams.map(t=>`<span class="story-team">${crest(t)}${esc(t.name)}</span>`).join("")}</div>`:""}
-     ${a.link&&/^https:\/\//.test(a.link)?`<a class="btn full read-more" href="${esc(a.link)}" target="_blank" rel="noopener">Read the full story on ESPN <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>`:`<p class="hint">This is a sample story. Real stories link to the full article.</p>`}
+     ${a.link&&/^https:\/\//.test(a.link)?`<a class="btn full read-more" href="${esc(a.link)}" target="_blank" rel="noopener">Read the full story on ${esc(a.source||"ESPN")} <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>`:`<p class="hint">This is a sample story. Real stories link to the full article.</p>`}
      ${more.length?`<div class="mustsee-head" style="color:#fff;margin-top:22px">More stories</div>${more.map(x=>`<a class="story" href="#news" data-story="${esc(x.id)}"><div class="thumb ${x.img?"":"ph"}" ${x.img?`style="background-image:url('${esc(x.img)}')"`:""}>${x.img?"":esc((TOPIC_NAME[x.topic]||"News").toUpperCase())}</div><div class="body"><h3>${esc(x.title)}</h3><div class="meta">${ago(x.time)}</div></div></a>`).join("")}`:""}
    </article>`;
   ov.hidden=false;ov.scrollTop=0;document.body.style.overflow="hidden";

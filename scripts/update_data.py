@@ -8,7 +8,7 @@ public football API and writes them next to index.html:
   logos/<id>.png    team badges cache (inlined into data.json)
 Then republish index.html with data.json and photos/ as files.
 """
-import json, os, io, re, sys, base64, datetime, urllib.request, concurrent.futures as cf
+import json, os, io, re, sys, html, base64, hashlib, datetime, email.utils, xml.etree.ElementTree as ET, urllib.request, concurrent.futures as cf
 from PIL import Image
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -18,6 +18,15 @@ STAND = "https://site.api.espn.com/apis/v2/sports/soccer/"
 LEAGUES = ["eng.1", "eng.2", "eng.fa", "esp.1", "ita.1", "ger.1", "fra.1", "sco.1",
            "ned.1", "por.1", "usa.1", "uefa.champions", "uefa.europa"]
 NEWS_PER_LEAGUE = 14
+# Extra news sources (public RSS feeds): headline, summary, photo and a link to the full story.
+FEEDS = [
+    ("BBC Sport", "https://feeds.bbci.co.uk/sport/football/rss.xml"),
+    ("The Guardian", "https://www.theguardian.com/football/rss"),
+    ("Sky Sports", "https://www.skysports.com/rss/12040"),
+    ("talkSPORT", "https://talksport.com/football/feed/"),
+]
+FEED_ITEMS = 15
+MEDIA = "{http://search.yahoo.com/mrss/}"
 DAYS_BACK, DAYS_AHEAD = 7, 7
 
 def get(url, raw=False):
@@ -37,6 +46,46 @@ def topic_of(t):
     if re.search(r"transfer|signs|signing|\bbid\b|loan|contract|deal", t): return "transfers"
     if re.search(r"viral|incredible|bizarre|wonder ?goal|stunning|record|video", t): return "viral"
     return "matches"
+
+def clean(t):
+    t = re.sub(r"<[^>]+>", " ", html.unescape(t or ""))
+    return re.sub(r"\s+", " ", t).strip()
+
+def feed_image(it):
+    cands = []
+    for tag in (MEDIA + "content", MEDIA + "thumbnail"):
+        for m in it.iter(tag):
+            if m.get("url") and m.get("medium") in (None, "image"):
+                cands.append((int(m.get("width") or 0), m.get("url")))
+    for e in it.findall("enclosure"):
+        if (e.get("type") or "").startswith("image") and e.get("url"): cands.append((0, e.get("url")))
+    best = None
+    if cands:
+        ok = [c for c in cands if c[0] <= 1200]
+        best = max(ok)[1] if ok else min(cands)[1]
+    else:
+        m = re.search(r'<img[^>]+src="([^"]+)"', (it.findtext("{http://purl.org/rss/1.0/modules/content/}encoded") or "") + (it.findtext("description") or ""))
+        if m: best = html.unescape(m.group(1))
+    if best and "ichef.bbci.co.uk" in best: best = re.sub(r"/(\d{2,3})/", "/976/", best, count=1)
+    return best
+
+def read_feed(source, url):
+    root = ET.fromstring(get(url, raw=True))
+    out = []
+    for it in root.iter("item"):
+        link = (it.findtext("link") or "").strip()
+        title = clean(it.findtext("title"))
+        if not link.startswith("https://") or not title: continue
+        try: when = email.utils.parsedate_to_datetime(it.findtext("pubDate")).astimezone(datetime.timezone.utc)
+        except Exception: continue
+        aid = "r" + hashlib.sha1(link.encode()).hexdigest()[:12]
+        desc = clean(it.findtext("description"))
+        if len(desc) > 320: desc = desc[:317].rsplit(" ", 1)[0] + "…"
+        out.append({"id": aid, "title": title, "desc": desc, "source": source,
+                    "time": when.isoformat().replace("+00:00", "Z"), "by": clean(it.findtext("{http://purl.org/dc/elements/1.1/}creator")) or None,
+                    "imgsrc": feed_image(it), "link": link, "topic": topic_of(title + " " + desc)})
+        if len(out) >= FEED_ITEMS: break
+    return out
 
 def save_img(url, path, size, fmt):
     if os.path.exists(path): return True
@@ -75,7 +124,7 @@ def main():
             aid = str(a.get("id"))
             if img.get("url"): photos[aid] = img["url"]
             arts.append({
-                "id": aid, "title": a.get("headline"), "desc": a.get("description"),
+                "id": aid, "source": "ESPN", "title": a.get("headline"), "desc": a.get("description"),
                 "time": a.get("published"), "by": a.get("byline"),
                 "img": f"photos/{aid}.jpg" if img.get("url") else None,
                 "credit": re.sub(r"^\((.*)\)$", r"\1", (img.get("credit") or "").strip()) or None, "caption": img.get("caption") or img.get("alt"),
@@ -113,6 +162,23 @@ def main():
                            "state": st.get("state"), "detail": st.get("shortDetail"),
                            "venue": (c.get("venue") or {}).get("fullName")})
             if ms: data["fixtures"][lg][d] = ms
+
+    # extra sources
+    all_teams = {t["name"]: t["id"] for tl in data["teams"].values() for t in tl if t.get("name")}
+    def teams_in(text):
+        return [{"id": i, "name": n} for n, i in all_teams.items() if re.search(r"\b" + re.escape(n) + r"\b", text)][:3]
+    with cf.ThreadPoolExecutor(4) as ex:
+        feeds = list(ex.map(lambda f: (f[0], safe(read_feed, f[0], f[1]) or []), FEEDS))
+    extra = []
+    for source, items in feeds:
+        for a in items:
+            src = a.pop("imgsrc")
+            if src: photos[a["id"]] = src
+            a["img"] = f"photos/{a['id']}.jpg" if src else None
+            a["teams"] = teams_in(a["title"] + " " + a["desc"])
+            extra.append(a)
+        print(f"{source}: {len(items)} stories")
+    data["news"]["more"] = extra
 
     with cf.ThreadPoolExecutor(12) as ex:
         list(ex.map(lambda kv: safe(save_img, kv[1], f"{OUT}/photos/{kv[0]}.jpg", (720, 420), "JPEG"), photos.items()))
