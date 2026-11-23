@@ -11,6 +11,9 @@
 <link rel="icon" type="image/png" sizes="192x192" href="logo-192.png">
 <link rel="apple-touch-icon" href="logo-192.png">
 <link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Pitchside">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 </head>
 <body>
 <style>
@@ -37,6 +40,10 @@ header{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:li
 .logo-text{font-family:"Barlow Condensed";font-weight:800;font-size:26px;line-height:1;text-transform:uppercase}
 .logo-text span{color:var(--red-2)}
 .live-pill{font-size:11px;font-weight:700;background:var(--red);padding:4px 8px;border-radius:4px;text-transform:uppercase;letter-spacing:.8px;display:flex;align-items:center;gap:6px}
+.install-btn{border:0;color:#fff;cursor:pointer;font-family:inherit}
+.install-steps{display:flex;flex-direction:column;gap:10px;margin:12px 0 0;padding:0;list-style:none;counter-reset:st}
+.install-steps li{display:flex;gap:10px;align-items:flex-start;line-height:1.4}
+.install-steps li::before{counter-increment:st;content:counter(st);flex:0 0 26px;height:26px;border-radius:50%;background:var(--red);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px}
 .live-pill i{width:7px;height:7px;border-radius:50%;background:#fff;animation:blink 1.4s infinite}
 @keyframes blink{50%{opacity:.25}}
 .ticker{background:var(--red);overflow:hidden;white-space:nowrap;font-weight:600;font-size:13px}
@@ -160,7 +167,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:30%;right:30%;heig
 <header>
   <div class="bar">
     <a class="logo" href="#" onclick="go('news');return false"><img class="logo-img" src="logo-96.png" alt="Pitchside logo" width="42" height="42"><div class="logo-text">Pitch<span>side</span></div></a>
-    <div class="live-pill"><i></i>Football</div>
+    <button class="live-pill install-btn" id="installBtn" type="button">⬇ Get the app</button>
   </div>
   <div class="ticker"><div class="ticker-inner" id="ticker">Loading headlines…</div></div>
 </header>
@@ -174,6 +181,17 @@ nav button.on::before{content:"";position:absolute;top:0;left:30%;right:30%;heig
   <button data-tab="podcasts" onclick="go('podcasts')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>Podcasts</button>
   <button data-tab="team" onclick="go('team')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l7 3v5c0 5-3 8-7 10-4-2-7-5-7-10V6z"/></svg>My Team</button>
 </div></nav>
+<div class="story-view" id="install" hidden>
+  <div class="story-bar"><button class="back" id="installBack" type="button">← Back</button><span class="tag">Get the app</span></div>
+  <div class="story-body">
+    <img src="logo-96.png" alt="" width="88" height="88" style="border-radius:20px;margin-top:10px">
+    <h1>Put Pitchside on your phone</h1>
+    <p class="lede">It's free and takes a few seconds. Pitchside then opens from your home screen like any other app.</p>
+    <div class="panel" id="instIos"><b>iPhone or iPad (Safari)</b><ol class="install-steps"><li><span>Open the Pitchside website in Safari.</span></li><li><span>Tap the Share button (the square with an arrow pointing up).</span></li><li><span>Scroll down and tap <b>Add to Home Screen</b>, then <b>Add</b>.</span></li></ol></div>
+    <div class="panel" id="instAndroid"><b>Android (Chrome)</b><ol class="install-steps"><li><span>Open the Pitchside website in Chrome.</span></li><li><span>Tap the ⋮ menu at the top right.</span></li><li><span>Tap <b>Install app</b> or <b>Add to Home screen</b>.</span></li></ol></div>
+    <div class="panel" id="instPc"><b>Computer (Chrome or Edge)</b><ol class="install-steps"><li><span>Open the Pitchside website.</span></li><li><span>Click the install icon at the right of the address bar.</span></li><li><span>Click <b>Install</b>.</span></li></ol></div>
+  </div>
+</div>
 <div class="story-view" id="story" hidden></div>
 <div class="toast" id="toast"></div>
 
@@ -671,6 +689,26 @@ function demoFixtures(league,dateISO){
 }
 
 /* ---------- Start ---------- */
+/* ---------- Install as an app ---------- */
+let installPrompt=null;
+window.addEventListener("beforeinstallprompt",e=>{e.preventDefault();installPrompt=e});
+window.addEventListener("appinstalled",()=>{installPrompt=null;toast("Pitchside is on your home screen ✓")});
+const standalone=(window.matchMedia&&matchMedia("(display-mode: standalone)").matches)||navigator.standalone;
+if(standalone)document.getElementById("installBtn").hidden=true;
+document.getElementById("installBtn").onclick=async()=>{
+  if(installPrompt){installPrompt.prompt();try{await installPrompt.userChoice}catch(e){}installPrompt=null;return}
+  const ov=document.getElementById("install");
+  const ua=navigator.userAgent;const ios=/iPhone|iPad|iPod/.test(ua),android=/Android/.test(ua);
+  document.getElementById("instIos").hidden=!(ios||!android&&!ios);
+  document.getElementById("instAndroid").hidden=!(android||!android&&!ios);
+  document.getElementById("instPc").hidden=ios||android;
+  ov.hidden=false;ov.scrollTop=0;document.body.style.overflow="hidden";
+};
+document.getElementById("installBack").onclick=()=>{document.getElementById("install").hidden=true;document.body.style.overflow=""};
+if("serviceWorker" in navigator&&location.protocol==="https:"&&!/claude\.ai|claudeusercontent/.test(location.host)){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+
 go(state.tab);
 if(state.tab!=="news")loadNews(state.news.league).then(r=>setTicker(r.items));
 checkTeam();
