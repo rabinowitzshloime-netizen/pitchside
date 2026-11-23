@@ -76,6 +76,27 @@ def summary(raw, limit=700):
         out = t if len(t) <= limit else ""
     return out
 
+def page_paragraph(url, have=""):
+    """For stories whose feed gives little or no summary: read the story page and take
+    its description plus the opening paragraphs, as whole sentences."""
+    page = get(url, raw=True).decode("utf-8", "replace")
+    parts = []
+    m = re.search(r'<meta[^>]+(?:property|name)="(?:og:description|description)"[^>]+content="([^"]+)"', page) or \
+        re.search(r'<meta[^>]+content="([^"]+)"[^>]+(?:property|name)="(?:og:description|description)"', page)
+    if m: parts.append(html.unescape(m.group(1)))
+    body = re.sub(r"(?is)<(script|style|nav|header|footer|figure|aside)[^>]*>.*?</\1>", " ", page)
+    for para in re.findall(r"(?is)<p[^>]*>(.*?)</p>", body):
+        t = clean(para)
+        if len(t) > 60 and not re.search(r"(?i)cookie|subscribe|sign up|newsletter|copyright|all rights reserved|javascript|advert", t):
+            parts.append(t)
+        if sum(len(x) for x in parts) > 900: break
+    seen, out = set(), []
+    for x in [have] + parts:
+        x = x.strip()
+        if x and x.lower() not in seen and not any(x.lower() in y.lower() for y in out):
+            seen.add(x.lower()); out.append(x if re.search(r"[.!?\"'’”]$", x) else x + ".")
+    return summary(" ".join(f"<p>{html.escape(x)}</p>" for x in out), 650)
+
 def feed_image(it):
     cands = []
     for tag in (MEDIA + "content", MEDIA + "thumbnail"):
@@ -206,6 +227,15 @@ def main():
             extra.append(a)
         print(f"{source}: {len(items)} stories")
     data["news"]["more"] = extra
+
+    # give every story a proper paragraph
+    short = [a for arts in data["news"].values() for a in arts if len(a.get("desc") or "") < 200 and (a.get("link") or "").startswith("https://")]
+    def fill(a):
+        more = safe(page_paragraph, a["link"], a.get("desc") or "")
+        if more and len(more) > len(a.get("desc") or ""): a["desc"] = more
+    with cf.ThreadPoolExecutor(8) as ex:
+        list(ex.map(fill, short))
+    print(f"filled {sum(1 for a in short if len(a.get('desc') or '') >= 200)} of {len(short)} short summaries")
 
     with cf.ThreadPoolExecutor(12) as ex:
         list(ex.map(lambda kv: safe(save_img, kv[1], f"{OUT}/photos/{kv[0]}.jpg", (720, 420), "JPEG"), photos.items()))
