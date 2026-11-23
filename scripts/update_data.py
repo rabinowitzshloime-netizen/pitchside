@@ -49,7 +49,8 @@ def topic_of(t):
 
 def clean(t):
     t = re.sub(r"<[^>]+>", " ", html.unescape(t or ""))
-    return re.sub(r"\s+", " ", t).strip()
+    t = re.sub(r"\s+", " ", t).strip()
+    return re.sub(r"\s+([,.;:!?])", r"\1", t)
 
 def summary(raw, limit=700):
     """Feed summary as whole sentences: list items and paragraphs become sentences,

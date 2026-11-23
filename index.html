@@ -162,7 +162,7 @@ nav button.on::before{content:"";position:absolute;top:0;left:30%;right:30%;heig
 .story-body{max-width:720px;margin:0 auto;padding:12px 16px}
 .story-body h1{font-size:38px;line-height:1.02;text-transform:uppercase;font-weight:800;margin:8px 0 12px;text-wrap:balance}
 .story-body .lede{font-size:18px;line-height:1.5;color:#e6ebf7;font-weight:500}
-.story-body p{line-height:1.6;color:#d6ddee}
+.story-body p{line-height:1.65;color:#d6ddee;font-size:16px}
 .story-teams{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0}
 .story-team{display:inline-flex;align-items:center;gap:8px;background:var(--card);border-radius:0;padding:6px 12px 6px 6px;font-weight:600;font-size:14px}
 .story-team .badge,.story-team img{width:26px;height:26px}
@@ -463,7 +463,7 @@ function openStory(id,list){
    <article class="story-body">
      <div class="meta">${esc([a.source,a.region].filter(Boolean).join(" · "))} · ${ago(a.time)}${a.by?" · By "+esc(a.by):""}</div>
      <h1>${esc(a.title)}</h1>
-     <p class="lede">${esc(a.desc||"")}</p>
+     ${(()=>{const d=a.desc||"";const m=d.match(/^.+?[.!?]["'’”]?(\s|$)/);const first=m?m[0].trim():d;const rest=d.slice(first.length).trim();return `<p class="lede">${esc(first)}</p>${rest?`<p>${esc(rest)}</p>`:""}`})()}
      ${a.full?a.full.map(p=>`<p>${esc(p)}</p>`).join(""):""}
      ${a.teams&&a.teams.length?`<div class="story-teams">${a.teams.map(t=>`<span class="story-team">${crest(t)}${esc(t.name)}</span>`).join("")}</div>`:""}
      ${a.link&&/^https:\/\//.test(a.link)?`<a class="btn full read-more" href="${esc(a.link)}" target="_blank" rel="noopener">Read the full story on ${esc(a.source||"ESPN")} <svg class="ic" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg></a>`:`<p class="hint">This is a sample story. Real stories link to the full article.</p>`}
