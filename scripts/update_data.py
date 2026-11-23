@@ -76,6 +76,19 @@ def summary(raw, limit=700):
         out = t if len(t) <= limit else ""
     return out
 
+JUNK = r"(?i)cookie|subscribe|sign up|newsletter|copyright|all rights reserved|javascript|advert|try again later|unavailable|sky bet|download the|app store|follow us|click here|terms and conditions|gamble"
+
+def espn_paragraph(api, have=""):
+    """ESPN stories: take the opening paragraphs from ESPN's story feed."""
+    j = get(api)
+    story = ((j.get("headlines") or [{}])[0]).get("story") or ""
+    paras = [clean(p) for p in re.findall(r"(?is)<p[^>]*>(.*?)</p>", story)]
+    paras = [p for p in paras if len(p.split()) >= 8 and not re.search(JUNK, p)]
+    out = [have.strip()] if have.strip() else []
+    for p in paras:
+        if not any(p.lower()[:60] in o.lower() for o in out): out.append(p)
+    return summary(" ".join(f"<p>{html.escape(x)}</p>" for x in out), 650)
+
 def page_paragraph(url, have=""):
     """For stories whose feed gives little or no summary: read the story page and take
     its description plus the opening paragraphs, as whole sentences."""
@@ -87,7 +100,7 @@ def page_paragraph(url, have=""):
     body = re.sub(r"(?is)<(script|style|nav|header|footer|figure|aside)[^>]*>.*?</\1>", " ", page)
     for para in re.findall(r"(?is)<p[^>]*>(.*?)</p>", body):
         t = clean(para)
-        if len(t) > 60 and not re.search(r"(?i)cookie|subscribe|sign up|newsletter|copyright|all rights reserved|javascript|advert", t):
+        if len(t.split()) >= 10 and re.search(r"[.!?\"'’”]$", t) and not re.search(JUNK, t):
             parts.append(t)
         if sum(len(x) for x in parts) > 900: break
     seen, out = set(), []
@@ -173,6 +186,7 @@ def main():
             if img.get("url"): photos[aid] = img["url"]
             arts.append({
                 "id": aid, "source": "ESPN", "title": a.get("headline"), "desc": a.get("description"),
+                "api": (((a.get("links") or {}).get("api") or {}).get("self") or {}).get("href"),
                 "time": a.get("published"), "by": a.get("byline"),
                 "img": f"photos/{aid}.jpg" if img.get("url") else None,
                 "credit": re.sub(r"^\((.*)\)$", r"\1", (img.get("credit") or "").strip()) or None, "caption": img.get("caption") or img.get("alt"),
@@ -229,12 +243,15 @@ def main():
     data["news"]["more"] = extra
 
     # give every story a proper paragraph
-    short = [a for arts in data["news"].values() for a in arts if len(a.get("desc") or "") < 200 and (a.get("link") or "").startswith("https://")]
+    short = [a for arts in data["news"].values() for a in arts if len(a.get("desc") or "") < 200 and (a.get("api") or (a.get("link") or "").startswith("https://"))]
     def fill(a):
-        more = safe(page_paragraph, a["link"], a.get("desc") or "")
+        api = a.pop("api", None)
+        more = safe(espn_paragraph, api, a.get("desc") or "") if api else safe(page_paragraph, a["link"], a.get("desc") or "")
         if more and len(more) > len(a.get("desc") or ""): a["desc"] = more
     with cf.ThreadPoolExecutor(8) as ex:
         list(ex.map(fill, short))
+    for arts in data["news"].values():
+        for a in arts: a.pop("api", None)
     print(f"filled {sum(1 for a in short if len(a.get('desc') or '') >= 200)} of {len(short)} short summaries")
 
     with cf.ThreadPoolExecutor(12) as ex:
